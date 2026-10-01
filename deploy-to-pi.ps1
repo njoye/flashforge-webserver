@@ -21,21 +21,38 @@ if (!(Test-Connection -ComputerName $PiIP -Count 1 -Quiet)) {
     Write-Warning "Could not ping $PiIP directly, but attempting SSH connection anyway..."
 }
 
-# 2. SCP transfer files across local WiFi
-Write-Host "[2/3] Transferring complete offline bundle to ${PiUser}@${PiIP}:~/flashforge-webserver..." -ForegroundColor Yellow
+# 2. Package and SCP transfer archive across local WiFi (fast & avoids .git permission issues)
+Write-Host "[2/3] Packaging clean offline bundle (excluding .git) and transferring to ${PiUser}@${PiIP}..." -ForegroundColor Yellow
 $localDir = $PSScriptRoot
+$archivePath = Join-Path $env:TEMP "ffcp-bundle.tar.gz"
 
-# Exclude git objects if not needed to make transfer even faster
-& scp -r -O $localDir "${PiUser}@${PiIP}:~/flashforge-webserver"
+if (Test-Path $archivePath) {
+    Remove-Item $archivePath -Force
+}
 
-if ($LASTEXITCODE -ne 0) {
+# Package using Windows built-in tar.exe
+& tar.exe -czf $archivePath --exclude=".git" --exclude="__pycache__" -C $localDir .
+
+if (!(Test-Path $archivePath)) {
+    Write-Error "Failed to create deployment archive."
+    exit 1
+}
+
+# Transfer single compressed archive to /tmp on the Pi
+& scp -O $archivePath "${PiUser}@${PiIP}:/tmp/ffcp-bundle.tar.gz"
+$scpExit = $LASTEXITCODE
+Remove-Item $archivePath -Force -ErrorAction SilentlyContinue
+
+if ($scpExit -ne 0) {
     Write-Error "SCP file transfer failed! Please verify SSH is enabled on the Pi and IP is correct."
     exit 1
 }
 
-# 3. Trigger offline installer via SSH
-Write-Host "[3/3] Executing 100% offline installation on the Pi..." -ForegroundColor Yellow
-& ssh "${PiUser}@${PiIP}" "cd ~/flashforge-webserver && chmod +x scripts/*.sh && sudo ./scripts/install-offline.sh"
+# 3. Clean unpack & trigger offline installer via SSH
+Write-Host "[3/3] Unpacking bundle and executing 100% offline installation on the Pi..." -ForegroundColor Yellow
+$remoteCmd = "sudo rm -rf ~/flashforge-webserver && mkdir -p ~/flashforge-webserver && tar -xzf /tmp/ffcp-bundle.tar.gz -C ~/flashforge-webserver && rm -f /tmp/ffcp-bundle.tar.gz && cd ~/flashforge-webserver && chmod +x scripts/*.sh && sudo ./scripts/install-offline.sh"
+
+& ssh -t "${PiUser}@${PiIP}" $remoteCmd
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "`n============================================================" -ForegroundColor Green

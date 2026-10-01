@@ -8,16 +8,7 @@ An ultra-lightweight, zero-bloat web print server and queue manager tailored spe
 
 > [!CAUTION]
 > **IMPORTANT SAFETY NOTICE — USE ENTIRELY AT YOUR OWN RISK**
-> 
-> 3D printers contain high-current electrical heating elements, heated print beds, hotends, and stepper motors operating at extreme temperatures (exceeding 200°C–300°C / 400°F–570°F).
-> 
-> - **Improper operation, firmware lockups, software bugs, serial communication interruptions, or hardware failures can cause thermal runaway, electrical shorts, equipment damage, or FIRE.**
-> - **NEVER LEAVE A 3D PRINTER OPERATING UNATTENDED.**
-> - Always maintain an operational smoke detector and an appropriate Class B/C fire extinguisher in the room where your 3D printer operates.
-> 
-> **LIMITATION OF LIABILITY:**
-> This software is provided **"AS IS" WITHOUT WARRANTY OF ANY KIND**, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, and non-infringement. In no event shall the authors, copyright holders, or contributors be held liable for any claim, damages, property destruction, fire damage, smoke damage, personal injury, death, or other liability arising from the use of this software or interaction with 3D printer hardware. See the [LICENSE](LICENSE) file for complete terms.
-
+> SEE LICENSE FOR MORE INFORMATION
 ---
 
 ## Architecture Overview

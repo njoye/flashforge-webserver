@@ -180,7 +180,7 @@ function renderStatus(data) {
   const noActiveMsg = document.getElementById("no-active-job");
   const btnAbort = document.getElementById("btn-abort");
 
-  if (state === "Printing" || state === "Heating" || (activeJob && state !== "Awaiting Bed Clearance")) {
+  if ((state === "Printing" || state === "Heating") && activeJob) {
     progressSection.style.display = "flex";
     noActiveMsg.style.display = "none";
     btnAbort.style.display = "inline-flex";

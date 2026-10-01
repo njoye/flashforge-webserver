@@ -220,7 +220,7 @@ class QueueManager:
 
     def cancel_active_job(self) -> bool:
         """Emergency abort active print."""
-        if self.streamer.state in (STATE_PRINTING, "Heating"):
+        if self.streamer.state in (STATE_PRINTING, "Heating") or self.active_job or self.streamer.active_job:
             self.streamer.cancel_print()
             return True
         return False

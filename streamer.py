@@ -387,10 +387,20 @@ class GcodeStreamer:
             elif self._abort_requested.is_set():
                 logger.info("Executing safe emergency cancel sequence.")
                 self._execute_safe_cancel_sequence()
+                cancelled_job = self.active_job
+                with self._lock:
+                    self.active_job = None
+                    self.lines_sent = 0
+                    self.total_lines = 0
+                    self.bytes_sent = 0
+                    self.total_bytes = 0
+                    self.start_time = None
+                    self.end_time = None
+                    self._abort_requested.clear()
                 self._set_state(STATE_IDLE, "Print cancelled by operator")
-                if self.on_job_cancelled and self.active_job:
+                if self.on_job_cancelled and cancelled_job:
                     try:
-                        self.on_job_cancelled(self.active_job)
+                        self.on_job_cancelled(cancelled_job)
                     except Exception as e:
                         logger.error("Error in on_job_cancelled callback: %s", e)
 
@@ -449,13 +459,29 @@ class GcodeStreamer:
                 return False
 
     def cancel_print(self):
-        """Request immediate graceful cancellation of the active print."""
-        if not self._is_streaming and self.state != STATE_PRINTING:
-            logger.info("Cancel called but not currently streaming.")
-            return
-
+        """Request immediate graceful cancellation of the active print or emergency stop."""
         logger.warning("Emergency abort triggered!")
         self._abort_requested.set()
+
+        if not self._is_streaming and self.state != STATE_PRINTING:
+            logger.info("Cancel called while not actively streaming. Executing immediate safe parking.")
+            self._execute_safe_cancel_sequence()
+            cancelled_job = self.active_job
+            with self._lock:
+                self.active_job = None
+                self.lines_sent = 0
+                self.total_lines = 0
+                self.bytes_sent = 0
+                self.total_bytes = 0
+                self.start_time = None
+                self.end_time = None
+                self._abort_requested.clear()
+            self._set_state(STATE_IDLE, "Emergency abort completed")
+            if self.on_job_cancelled and cancelled_job:
+                try:
+                    self.on_job_cancelled(cancelled_job)
+                except Exception as e:
+                    logger.error("Error in on_job_cancelled callback: %s", e)
 
     def _execute_safe_cancel_sequence(self):
         """

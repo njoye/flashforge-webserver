@@ -142,7 +142,11 @@ def test_abort_sequence():
     assert len(cancelled_flag) == 1, "Cancelled callback was not invoked"
     assert streamer.temps["tool0"]["target"] == 0.0, "Heater T0 was not turned off"
     assert streamer.temps["bed"]["target"] == 0.0, "Heater Bed was not turned off"
-    print("  ✓ Abort verified: heaters shut off, buffers flushed, state returned to Idle.")
+    assert streamer.active_job is None, "Active job was not cleared after cancel"
+    assert not streamer._abort_requested.is_set(), "Abort requested flag was not cleared"
+    assert streamer.lines_sent == 0, "Lines sent counter was not reset"
+    assert streamer.total_lines == 0, "Total lines counter was not reset"
+    print("  ✓ Abort verified: heaters shut off, active job and counters cleared, state returned to Idle.")
 
 
 def test_streamer_disconnected():

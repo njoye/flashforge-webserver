@@ -62,6 +62,7 @@ class GcodeStreamer:
 
         self.ser: Optional[Any] = None
         self._lock = threading.RLock()
+        self._serial_lock = threading.Lock()
         self._state = STATE_IDLE if self.mock_mode else STATE_OFFLINE
         self._status_message = "Ready" if self.mock_mode else "Printer offline (waiting for connection)"
 
@@ -212,14 +213,19 @@ class GcodeStreamer:
                             self.temps[k]["actual"] = max(24.0, act - 2.0)
             return
 
-        with self._lock:
-            if not self.ser or not self.ser.is_open:
-                return
-            ser = self.ser
+        # Attempt to acquire serial port exclusively without blocking callers
+        if not self._serial_lock.acquire(blocking=False):
+            # Serial bus is busy with another transaction (e.g. manual move or streaming)
+            return
 
         try:
+            with self._lock:
+                if not self.ser or not self.ser.is_open:
+                    return
+                ser = self.ser
+
             ser.write(b"M105\n")
-            # Read response lines until ok or timeout (without holding lock across I/O)
+            # Read response lines until ok or timeout (without holding state lock across I/O)
             start_t = time.time()
             while time.time() - start_t < 1.0:
                 line = ser.readline().decode('ascii', errors='ignore').strip()
@@ -229,6 +235,8 @@ class GcodeStreamer:
                         break
         except Exception as e:
             logger.debug("M105 poll error: %s", e)
+        finally:
+            self._serial_lock.release()
 
     def _parse_temperature_string(self, text: str):
         """Extract T0, T1, and B readings from RepRap/GPX response string."""
@@ -409,35 +417,36 @@ class GcodeStreamer:
         if not self.ser or not self.ser.is_open:
             return False
 
-        try:
-            cmd = (clean_line + "\n").encode('ascii')
-            self.ser.write(cmd)
+        with self._serial_lock:
+            try:
+                cmd = (clean_line + "\n").encode('ascii')
+                self.ser.write(cmd)
 
-            # Wait for 'ok' ACK
-            # MightyBoard/GPX operations like homing (G28) or heating (M109/M190) can take minutes,
-            # so we use a loop with short readline timeouts rather than a fixed tiny timeout.
-            start_wait = time.time()
-            while True:
-                if self._abort_requested.is_set():
-                    return False
+                # Wait for 'ok' ACK
+                # MightyBoard/GPX operations like homing (G28) or heating (M109/M190) can take minutes,
+                # so we use a loop with short readline timeouts rather than a fixed tiny timeout.
+                start_wait = time.time()
+                while True:
+                    if self._abort_requested.is_set():
+                        return False
 
-                line = self.ser.readline().decode('ascii', errors='ignore').strip()
-                if line:
-                    self._parse_temperature_string(line)
-                    # Check for 'ok' ACK
-                    if line.startswith("ok") or line.endswith("ok") or "ok" in line.split():
-                        return True
-                    if "error" in line.lower():
-                        logger.warning("Printer reported error: %s", line)
+                    line = self.ser.readline().decode('ascii', errors='ignore').strip()
+                    if line:
+                        self._parse_temperature_string(line)
+                        # Check for 'ok' ACK
+                        if line.startswith("ok") or line.endswith("ok") or "ok" in line.split():
+                            return True
+                        if "error" in line.lower():
+                            logger.warning("Printer reported error: %s", line)
 
-                # Timeout guard (600s max per command e.g. long bed heatup)
-                if time.time() - start_wait > 600.0:
-                    logger.error("Timeout (600s) waiting for ACK to command: %s", clean_line)
-                    return False
+                    # Timeout guard (600s max per command e.g. long bed heatup)
+                    if time.time() - start_wait > 600.0:
+                        logger.error("Timeout (600s) waiting for ACK to command: %s", clean_line)
+                        return False
 
-        except Exception as e:
-            logger.error("Serial transmission error for '%s': %s", clean_line, e)
-            return False
+            except Exception as e:
+                logger.error("Serial transmission error for '%s': %s", clean_line, e)
+                return False
 
     def cancel_print(self):
         """Request immediate graceful cancellation of the active print."""
@@ -532,20 +541,31 @@ class GcodeStreamer:
             if not self.connect():
                 return "Error: Serial port offline."
 
-        try:
-            self.ser.write((gcode_str.strip() + "\n").encode('ascii'))
-            output = []
-            start_t = time.time()
-            while time.time() - start_t < 3.0:
-                line = self.ser.readline().decode('ascii', errors='ignore').strip()
-                if line:
-                    output.append(line)
-                    self._parse_temperature_string(line)
-                    if "ok" in line:
-                        break
-            return "\n".join(output) if output else "ok"
-        except Exception as e:
-            return f"Error: {e}"
+        with self._serial_lock:
+            try:
+                # Flush input buffer before sending new command
+                try:
+                    self.ser.reset_input_buffer()
+                except Exception:
+                    pass
+
+                self.ser.write((gcode_str.strip() + "\n").encode('ascii'))
+                output = []
+                cmd_upper = gcode_str.upper()
+                timeout = 45.0 if any(k in cmd_upper for k in ("G28", "M109", "M190")) else 10.0
+                start_t = time.time()
+                while time.time() - start_t < timeout:
+                    line = self.ser.readline().decode('ascii', errors='ignore').strip()
+                    if line:
+                        output.append(line)
+                        self._parse_temperature_string(line)
+                        if line.startswith("ok") or line.endswith("ok") or "ok" in line.split():
+                            break
+                        if "error" in line.lower():
+                            break
+                return "\n".join(output) if output else "ok"
+            except Exception as e:
+                return f"Error: {e}"
 
     def get_status(self) -> Dict[str, Any]:
         """Return comprehensive status dictionary for API and web UI."""

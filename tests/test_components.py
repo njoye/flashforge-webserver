@@ -145,6 +145,20 @@ def test_abort_sequence():
     print("  ✓ Abort verified: heaters shut off, buffers flushed, state returned to Idle.")
 
 
+def test_streamer_disconnected():
+    print("[TEST 5/5] Testing Disconnected Printer Detection & Null Temperatures...")
+    # Point to a nonexistent port without mock mode
+    streamer = GcodeStreamer(port="/tmp/nonexistent-pty-12345", mock_mode=False)
+    status = streamer.get_status()
+
+    assert not status["connected"], "Printer should report connected=False"
+    assert status["state"] == "Offline", f"State should be Offline, got {status['state']}"
+    assert status["temperatures"]["tool0"]["actual"] is None, "Tool 0 actual temp must be None when disconnected"
+    assert status["temperatures"]["tool1"]["actual"] is None, "Tool 1 actual temp must be None when disconnected"
+    assert status["temperatures"]["bed"]["actual"] is None, "Bed actual temp must be None when disconnected"
+    print("  ✓ Disconnected check passed: connected=False, temperatures correctly report None.")
+
+
 if __name__ == '__main__':
     print("==================================================")
     print(" FlashForge Creator Pro WebServer Component Tests ")
@@ -153,6 +167,7 @@ if __name__ == '__main__':
     test_streamer_mock_and_safety_gate()
     test_queue_manager()
     test_abort_sequence()
+    test_streamer_disconnected()
     print("\n==================================================")
     print(" ALL TESTS PASSED SUCCESSFULLY! ")
     print("==================================================")

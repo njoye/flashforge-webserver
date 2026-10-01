@@ -305,6 +305,20 @@ body {
   gap: 0.75rem;
 }
 
+.connection-status-msg {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.connection-status-msg.text-connected {
+  color: var(--accent-green-bright);
+}
+
+.connection-status-msg.text-disconnected {
+  color: var(--accent-red-hover);
+}
+
 .temp-item {
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -313,7 +327,16 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  transition: border-color var(--transition-fast);
+  transition: all var(--transition-fast);
+}
+
+.temp-item.offline {
+  opacity: 0.65;
+  background-color: rgba(22, 27, 34, 0.4);
+}
+
+.temp-item.offline .temp-value {
+  color: var(--text-muted);
 }
 
 .temp-item.heating {

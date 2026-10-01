@@ -56,40 +56,41 @@
         <section class="card" id="status-card">
           <div class="card-header">
             <h2 class="card-title">📊 Live Status</h2>
+            <span id="connection-status-msg" class="connection-status-msg">Checking...</span>
           </div>
 
           <!-- Temperatures Section -->
           <div class="temp-grid">
-            <div class="temp-item" id="temp-t0">
+            <div class="temp-item offline" id="temp-t0">
               <div class="temp-label">
                 <span>Right Nozzle (T0)</span>
                 <span>🔥</span>
               </div>
               <div class="temp-value">
-                <span class="temp-actual">25</span><span class="temp-unit">°C</span>
-                <span class="temp-target">/ <span class="temp-target-val">0</span>°C</span>
+                <span class="temp-actual">--</span><span class="temp-unit">°C</span>
+                <span class="temp-target">/ <span class="temp-target-val">--</span>°C</span>
               </div>
             </div>
 
-            <div class="temp-item" id="temp-t1">
+            <div class="temp-item offline" id="temp-t1">
               <div class="temp-label">
                 <span>Left Nozzle (T1)</span>
                 <span>🔥</span>
               </div>
               <div class="temp-value">
-                <span class="temp-actual">25</span><span class="temp-unit">°C</span>
-                <span class="temp-target">/ <span class="temp-target-val">0</span>°C</span>
+                <span class="temp-actual">--</span><span class="temp-unit">°C</span>
+                <span class="temp-target">/ <span class="temp-target-val">--</span>°C</span>
               </div>
             </div>
 
-            <div class="temp-item" id="temp-bed">
+            <div class="temp-item offline" id="temp-bed">
               <div class="temp-label">
                 <span>Heated Bed</span>
                 <span>♨️</span>
               </div>
               <div class="temp-value">
-                <span class="temp-actual">24</span><span class="temp-unit">°C</span>
-                <span class="temp-target">/ <span class="temp-target-val">0</span>°C</span>
+                <span class="temp-actual">--</span><span class="temp-unit">°C</span>
+                <span class="temp-target">/ <span class="temp-target-val">--</span>°C</span>
               </div>
             </div>
           </div>

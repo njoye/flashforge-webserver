@@ -61,15 +61,15 @@ class GcodeStreamer:
         self.mock_mode = mock_mode or not SERIAL_AVAILABLE
 
         self.ser: Optional[Any] = None
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._state = STATE_IDLE if self.mock_mode else STATE_OFFLINE
-        self._status_message = "Ready"
+        self._status_message = "Ready" if self.mock_mode else "Printer offline (waiting for connection)"
 
-        # Temperatures
+        # Temperatures (None indicates disconnected / no reading received yet)
         self.temps = {
-            "tool0": {"actual": 25.0, "target": 0.0},
-            "tool1": {"actual": 25.0, "target": 0.0},
-            "bed":   {"actual": 24.0, "target": 0.0}
+            "tool0": {"actual": 25.0 if self.mock_mode else None, "target": 0.0},
+            "tool1": {"actual": 25.0 if self.mock_mode else None, "target": 0.0},
+            "bed":   {"actual": 24.0 if self.mock_mode else None, "target": 0.0}
         }
 
         # Active Job State
@@ -166,6 +166,8 @@ class GcodeStreamer:
             if not self.mock_mode:
                 self._state = STATE_OFFLINE
                 self._status_message = "Disconnected"
+                for k in self.temps:
+                    self.temps[k]["actual"] = None
 
     def _start_poll_thread(self):
         """Start low-frequency temperature polling thread."""
@@ -177,12 +179,20 @@ class GcodeStreamer:
         """Poll M105 temperature query periodically every 2.5 seconds."""
         while not self._stop_poll.is_set():
             time.sleep(2.5)
-            # Only poll in Idle or Awaiting Bed Clearance to avoid interfering with streaming
-            # (During streaming, M105 is interleaved inside the ping-pong loop)
+
             with self._lock:
                 current_st = self._state
                 is_streaming = self._is_streaming
 
+            # Auto-reconnect if offline and GPX virtual port becomes available
+            if current_st == STATE_OFFLINE and os.path.exists(self.port):
+                logger.info("Virtual port %s appeared. Auto-connecting...", self.port)
+                if self.connect():
+                    with self._lock:
+                        current_st = self._state
+
+            # Only poll in Idle or Awaiting Bed Clearance to avoid interfering with streaming
+            # (During streaming, M105 is interleaved inside the ping-pong loop)
             if not is_streaming and current_st in (STATE_IDLE, STATE_HEATING, STATE_AWAITING_BED_CLEARANCE):
                 self._send_status_query()
 
@@ -192,8 +202,8 @@ class GcodeStreamer:
             # Simulate slight temperature jitter or cool-down
             with self._lock:
                 for k in ["tool0", "tool1", "bed"]:
-                    tgt = self.temps[k]["target"]
-                    act = self.temps[k]["actual"]
+                    tgt = self.temps[k]["target"] or 0.0
+                    act = self.temps[k]["actual"] or 25.0
                     if tgt > 0:
                         if act < tgt:
                             self.temps[k]["actual"] = min(tgt, act + 5.0)
@@ -205,20 +215,18 @@ class GcodeStreamer:
         with self._lock:
             if not self.ser or not self.ser.is_open:
                 return
+            ser = self.ser
 
         try:
-            with self._lock:
-                self.ser.write(b"M105\n")
-                resp = ""
-                # Read response lines until ok or timeout
-                start_t = time.time()
-                while time.time() - start_t < 1.0:
-                    line = self.ser.readline().decode('ascii', errors='ignore').strip()
-                    if line:
-                        resp += " " + line
-                        self._parse_temperature_string(line)
-                        if line.startswith("ok") or "ok" in line:
-                            break
+            ser.write(b"M105\n")
+            # Read response lines until ok or timeout (without holding lock across I/O)
+            start_t = time.time()
+            while time.time() - start_t < 1.0:
+                line = ser.readline().decode('ascii', errors='ignore').strip()
+                if line:
+                    self._parse_temperature_string(line)
+                    if line.startswith("ok") or "ok" in line:
+                        break
         except Exception as e:
             logger.debug("M105 poll error: %s", e)
 
@@ -525,18 +533,17 @@ class GcodeStreamer:
                 return "Error: Serial port offline."
 
         try:
-            with self._lock:
-                self.ser.write((gcode_str.strip() + "\n").encode('ascii'))
-                output = []
-                start_t = time.time()
-                while time.time() - start_t < 3.0:
-                    line = self.ser.readline().decode('ascii', errors='ignore').strip()
-                    if line:
-                        output.append(line)
-                        self._parse_temperature_string(line)
-                        if "ok" in line:
-                            break
-                return "\n".join(output) if output else "ok"
+            self.ser.write((gcode_str.strip() + "\n").encode('ascii'))
+            output = []
+            start_t = time.time()
+            while time.time() - start_t < 3.0:
+                line = self.ser.readline().decode('ascii', errors='ignore').strip()
+                if line:
+                    output.append(line)
+                    self._parse_temperature_string(line)
+                    if "ok" in line:
+                        break
+            return "\n".join(output) if output else "ok"
         except Exception as e:
             return f"Error: {e}"
 

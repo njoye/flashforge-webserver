@@ -143,9 +143,22 @@ function renderStatus(data) {
   const stateBadge = document.getElementById("printer-state-badge");
   const stateText = document.getElementById("printer-state-text");
   const state = data.state || "Offline";
+  const isConnected = Boolean(data.connected);
 
   stateBadge.className = `badge badge-${state.toLowerCase().replace(/\s+/g, "-")}`;
   stateText.textContent = state;
+
+  // Update Connection Status Message
+  const connMsgElem = document.getElementById("connection-status-msg");
+  if (connMsgElem) {
+    if (isConnected) {
+      connMsgElem.textContent = "● Connected";
+      connMsgElem.className = "connection-status-msg text-connected";
+    } else {
+      connMsgElem.textContent = "● Not Connected (Waiting for printer)";
+      connMsgElem.className = "connection-status-msg text-disconnected";
+    }
+  }
 
   // Show/Hide Safety Gate Banner
   const safetyBanner = document.getElementById("safety-gate-banner");
@@ -155,11 +168,11 @@ function renderStatus(data) {
     safetyBanner.style.display = "none";
   }
 
-  // Update Temperatures
+  // Update Temperatures (only show real values when connected)
   const temps = data.temperatures || {};
-  renderTemp("temp-t0", temps.tool0);
-  renderTemp("temp-t1", temps.tool1);
-  renderTemp("temp-bed", temps.bed);
+  renderTemp("temp-t0", temps.tool0, isConnected);
+  renderTemp("temp-t1", temps.tool1, isConnected);
+  renderTemp("temp-bed", temps.bed, isConnected);
 
   // Update Active Job Section & Abort Button
   const activeJob = data.active_job;
@@ -198,18 +211,27 @@ function renderStatus(data) {
   }
 }
 
-function renderTemp(elemId, tData) {
+function renderTemp(elemId, tData, isConnected) {
   const container = document.getElementById(elemId);
-  if (!container || !tData) return;
+  if (!container) return;
 
   const actualElem = container.querySelector(".temp-actual");
   const targetElem = container.querySelector(".temp-target-val");
 
-  const actual = Math.round(tData.actual || 0);
+  if (!isConnected || !tData || tData.actual === null || tData.actual === undefined) {
+    container.classList.add("offline");
+    container.classList.remove("heating");
+    if (actualElem) actualElem.textContent = "--";
+    if (targetElem) targetElem.textContent = "--";
+    return;
+  }
+
+  container.classList.remove("offline");
+  const actual = Math.round(tData.actual);
   const target = Math.round(tData.target || 0);
 
-  actualElem.textContent = actual;
-  targetElem.textContent = target;
+  if (actualElem) actualElem.textContent = actual;
+  if (targetElem) targetElem.textContent = target;
 
   if (target > 0 && actual < target - 2) {
     container.classList.add("heating");
@@ -224,6 +246,16 @@ function renderOffline() {
   stateBadge.className = "badge badge-offline";
   stateText.textContent = "Offline";
   document.getElementById("btn-abort").style.display = "none";
+
+  const connMsgElem = document.getElementById("connection-status-msg");
+  if (connMsgElem) {
+    connMsgElem.textContent = "● Web server unreachable";
+    connMsgElem.className = "connection-status-msg text-disconnected";
+  }
+
+  renderTemp("temp-t0", null, false);
+  renderTemp("temp-t1", null, false);
+  renderTemp("temp-bed", null, false);
 }
 
 function renderQueue(data) {

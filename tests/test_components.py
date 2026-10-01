@@ -90,12 +90,12 @@ def test_queue_manager():
     meta = inspect_gcode_file(sample_file)
 
     # 1. Add job while idle -> Should immediately dispatch
-    job1 = qm.add_job(sample_file, "job1.gcode", "Tim", meta)
+    job1 = qm.add_job(sample_file, "job1.gcode", "Operator 1", meta)
     assert job1["status"] == "printing", f"Job 1 should be printing, got {job1['status']}"
     print("  ✓ Job 1 auto-dispatched because printer was Idle.")
 
     # 2. Add second job while Job 1 is printing -> Should go to pending queue
-    job2 = qm.add_job(sample_file, "job2.gcode", "Alice", meta)
+    job2 = qm.add_job(sample_file, "job2.gcode", "Operator 2", meta)
     assert job2["status"] == "pending", f"Job 2 should be pending, got {job2['status']}"
     assert len(qm.pending_jobs) == 1, f"Expected 1 pending job, got {len(qm.pending_jobs)}"
     print("  ✓ Job 2 queued as pending because printer is active.")

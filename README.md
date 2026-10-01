@@ -1,31 +1,49 @@
 # FlashForge Creator Pro — Ultra-Lightweight Print Server & Queue Manager
 
-An ultra-lightweight, zero-bloat 3D print server and queue manager tailored specifically for the **FlashForge Creator Pro** (Dual Extruder, MightyBoard running Sailfish firmware) deployed on a **Raspberry Pi Zero W** (ARMv6l, single-core 1.0 GHz, 512 MB RAM) running Raspberry Pi OS.
+An ultra-lightweight, zero-bloat web print server and queue manager tailored specifically for the **FlashForge Creator Pro** (Dual Extruder, MightyBoard running Sailfish firmware) deployed on a **Raspberry Pi Zero W** (ARMv6l, single-core 1.0 GHz, 512 MB RAM) running Raspberry Pi OS.
+
+---
+
+## ⚠️ Fire Safety & Liability Disclaimer
+
+> [!CAUTION]
+> **IMPORTANT SAFETY NOTICE — USE ENTIRELY AT YOUR OWN RISK**
+> 
+> 3D printers contain high-current electrical heating elements, heated print beds, hotends, and stepper motors operating at extreme temperatures (exceeding 200°C–300°C / 400°F–570°F).
+> 
+> - **Improper operation, firmware lockups, software bugs, serial communication interruptions, or hardware failures can cause thermal runaway, electrical shorts, equipment damage, or FIRE.**
+> - **NEVER LEAVE A 3D PRINTER OPERATING UNATTENDED.**
+> - Always maintain an operational smoke detector and an appropriate Class B/C fire extinguisher in the room where your 3D printer operates.
+> 
+> **LIMITATION OF LIABILITY:**
+> This software is provided **"AS IS" WITHOUT WARRANTY OF ANY KIND**, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, and non-infringement. In no event shall the authors, copyright holders, or contributors be held liable for any claim, damages, property destruction, fire damage, smoke damage, personal injury, death, or other liability arising from the use of this software or interaction with 3D printer hardware. See the [LICENSE](LICENSE) file for complete terms.
 
 ---
 
 ## Architecture Overview
 
-Because Sailfish firmware uses binary S3G/X3G packets rather than ASCII G-code, this server uses a C-compiled `gpx` daemon running in pseudo-terminal (PTY) mode to translate serial communication on the fly with zero overhead.
+Sailfish firmware uses binary S3G/X3G serial packets rather than standard ASCII G-code. Heavy web servers like OctoPrint or Moonraker can easily overwhelm the single-core 512 MB ARMv6 processor on a Pi Zero W. 
+
+This project solves this by using a compiled native C `gpx` daemon running in pseudo-terminal (PTY) mode (`-D /tmp/ffcp-pty`). A lightweight Python streaming engine talks standard G-code to `/tmp/ffcp-pty`, and GPX translates it to binary X3G on the fly with practically zero CPU overhead.
 
 ```
 +-------------------------------------------------------------------------+
 |                         Raspberry Pi Zero W                             |
 |                                                                         |
-|  [ Web Browser / Mobile Phone ]                                         |
-|                 │ (HTTP / WebSocket-less Polling on Port 8080)          |
+|  [ Web Browser / Mobile Device ]                                        |
+|                 │ (HTTP REST API / Lightweight 1.5s Polling on :8080)    |
 |                 ▼                                                       |
 |  +───────────────────────────────────────────+                          |
 |  | ffcp-queue.service (Python / Bottle)       |                          |
-|  |  • server.py (REST API & Web UI)          |                          |
-|  |  • gcode_parser.py (Header metadata)       |                          |
-|  |  • queue_manager.py (Spool & Queue)       |                          |
-|  |  • streamer.py (Ping-Pong Flow Control)   |                          |
+|  |  • server.py (Single-thread REST API)     |                          |
+|  |  • gcode_parser.py (Zero-load metadata)   |                          |
+|  |  • queue_manager.py (Spool & queue state) |                          |
+|  |  • streamer.py (Serial ping-pong flow)    |                          |
 |  +───────────────────────────────────────────+                          |
 |                 │                                                       |
 |                 │ ASCII G-code ("G1 X10 Y10\n", "M105\n")               |
 |                 ▼                                                       |
-|        /tmp/ffcp-pty (Virtual Serial PTY Symlink)                       |
+|        /tmp/ffcp-pty (Bidirectional Virtual Serial PTY Symlink)         |
 |                 ▲                                                       |
 |                 │ ASCII responses ("ok T:205 /205 B:60 /60\n")          |
 |  +───────────────────────────────────────────+                          |
@@ -37,7 +55,7 @@ Because Sailfish firmware uses binary S3G/X3G packets rather than ASCII G-code, 
 |                 ▼ (115200 Baud S3G/X3G Binary Packets)                  |
 |        /dev/ttyUSB0 (or /dev/serial/by-id/*)                            |
 +─────────────────┼───────────────────────────────────────────────────────+
-                  │ (USB Serial)
+                  │ (USB Serial Cable)
                   ▼
    [ FlashForge Creator Pro MightyBoard ]
 ```
@@ -47,26 +65,29 @@ Because Sailfish firmware uses binary S3G/X3G packets rather than ASCII G-code, 
 ## Key Features
 
 1. **Native C GPX PTY Bridge:**
-   - Translates ASCII G-code to Sailfish binary packets on the fly.
-   - Automatically detects MightyBoard USB hardware across reboots using `/dev/serial/by-id/*` or `/dev/ttyUSB0`.
+   - On-the-fly conversion of standard G-code to Sailfish binary packets.
+   - Automatically detects FlashForge MightyBoard hardware across reboots via `/dev/serial/by-id/*` or `/dev/ttyUSB0` / `/dev/ttyACM0`.
    - Exposes a bidirectional virtual serial port `/tmp/ffcp-pty`.
 
 2. **Ultra-Lightweight Python Streaming Engine (`streamer.py`):**
-   - Strictly uses Python standard library + `pyserial`.
+   - Strictly standard library + vendored pure-Python `pyserial`.
    - Strict ping-pong flow control: sends line-by-line and awaits `ok` ACK.
-   - Low-frequency background `M105` status polling (every 2.5s) to parse `T0`, `T1`, and `B` actual/target temperatures.
-   - Graceful cancel/abort: flushes buffers, stops extrusion, kills heaters (`M104 T0 S0`, `M104 T1 S0`, `M140 S0`), lowers bed 10mm (`G91 G1 Z10 G90`), homes XY (`G28 X Y`), and disables steppers (`M84`).
+   - Background `M105` status polling every 2.5s parsing `T0`, `T1`, and `Bed` temperatures.
+   - Dedicated non-blocking serial mutex: guarantees that background polling never collides with long physical homing (`G28`) or manual moves.
+   - Auto-reconnect: links to the virtual port automatically as soon as GPX finishes hardware handshaking.
 
-3. **Collision Safety Gate ("Bed Cleared - Start Next Job"):**
-   - When a job finishes, the printer enters `Awaiting Bed Clearance`.
-   - The queue **never** automatically starts the next job on its own.
-   - A human operator must press **"Bed Cleared - Start Next Job"** in the UI or run `ffcp-clear-bed` to confirm the build plate is cleared before the next queued job is dispatched.
+3. **Collision Safety Gate ("Awaiting Bed Clearance"):**
+   - When a print finishes, the server moves to **`Awaiting Bed Clearance`**.
+   - The queue **never** auto-starts the next print on its own, preventing the nozzle from smashing into an unremoved print.
+   - A human operator must press **"✓ Bed Cleared — Start Next Job"** in the UI (or run `ffcp-clear-bed` via CLI/GPIO pushbutton) to dispatch the next job.
 
-4. **Sleek Single-Page Web App:**
-   - Zero-dependency HTML5 / Vanilla JS / Vanilla CSS dark-mode dashboard.
-   - Drag-and-drop `.gcode` file upload with automatic header inspection (detects `T0` right, `T1` left, or both; target temperatures; slicer estimated time).
-   - Live Status Card with real-time temperatures, animated state badges, progress bar, and lines/bytes counters.
-   - Reorderable print queue (move up, move down, direct start, remove).
+4. **Emergency Abort:**
+   - Clicking **🛑 Emergency Abort** immediately halts streaming, shuts down all heaters (`M104 T0 S0`, `M104 T1 S0`, `M140 S0`), kills extrusion motor (`M108`), lowers bed 10mm (`G91 G1 Z10 G90`), parks the toolhead (`G28 X Y`), and disables steppers (`M84`).
+
+5. **Modern Dark-Mode Dashboard:**
+   - Fast, vanilla HTML5/CSS/JavaScript with responsive layout for phone and desktop.
+   - Drag-and-drop `.gcode` file upload with automatic metadata extraction (nozzle selection, target temperatures, slicer time estimation).
+   - Reorderable print queue (move up, move down, direct start, delete).
 
 ---
 
@@ -79,188 +100,119 @@ flashforge-webserver/
 ├── queue_manager.py           # Persistent queue manager & safety gate
 ├── gcode_parser.py            # Streaming G-code header metadata inspector
 ├── bottle.py                  # Vendored zero-dependency WSGI microframework
+├── serial/                    # Vendored pure-Python pyserial 3.5 package
 ├── static/
 │   ├── index.html             # Responsive dashboard layout
 │   ├── app.css                # Polished dark-mode styling
 │   └── app.js                 # Vanilla JS client (live polling & drag-and-drop)
 ├── scripts/
-│   ├── install.sh             # 1-step automated installer for Raspberry Pi OS
 │   ├── gpx-daemon.sh          # MightyBoard auto-detection & GPX launcher
+│   ├── install-offline.sh     # 100% offline installer (no internet needed)
+│   ├── install.sh             # Online compiler installer (for WAN-connected Pis)
 │   └── ffcp-clear-bed         # CLI helper / GPIO hook for Bed Cleared button
 ├── systemd/
-│   ├── gpx-daemon.service     # Systemd unit for GPX PTY bridge
-│   └── ffcp-queue.service     # Systemd unit for Web Queue server
+│   ├── gpx-daemon.service     # Systemd service for GPX PTY bridge
+│   └── ffcp-queue.service     # Systemd service for Web Queue server
+├── offline/
+│   ├── bin/gpx                # Pre-compiled ARMv6 native binary for Pi Zero W
+│   └── gpx_2.6.8-1_armhf.deb  # Raspbian ARMv6 deb package
+├── deploy-to-pi.ps1           # 1-Click transfer & install script from Windows
 ├── examples/
-│   └── test_cube.gcode        # Test print with dual-extruder comments
+│   └── test_cube.gcode        # Test print fixture
 └── tests/
     └── test_components.py     # Automated unit & integration test suite
 ```
 
 ---
 
-## Offline Deployment (Local Wi-Fi Without Internet)
+## Installation & Deployment
 
-If your Pi Zero W is connected to a local Wi-Fi network without internet access (WAN), **you do not need apt-get, git clone, or pip!** All dependencies are pre-bundled in this repository:
-- **`bottle.py`**: Vendored single-file micro-framework.
-- **`serial/`**: Vendored pure Python `pyserial` package.
-- **`offline/bin/gpx`**: Pre-compiled native ARMv6 binary for Raspberry Pi Zero W.
-- **`offline/gpx_2.6.8-1_armhf.deb`**: Official Raspbian package.
+### Option A: 1-Click Deployment from Windows (Recommended)
 
-### Option A: 1-Click Push from Windows (Easiest)
-From your Windows PC in PowerShell, run:
-```powershell
-.\deploy-to-pi.ps1 -PiIP 192.168.1.50 -PiUser pi
-```
-*(Replace `192.168.1.50` with your Pi's local IP or `raspberrypi.local`)*.
+If your Pi Zero W is connected to your local Wi-Fi:
 
-This will automatically:
-1. Copy all project files across your local Wi-Fi via `scp`.
-2. Run the offline installer on the Pi over SSH.
-3. Start the services and verify the web dashboard.
+1. Open PowerShell in this folder.
+2. Run the deployment script:
+   ```powershell
+   .\deploy-to-pi.ps1 -PiIP <PI_IP_ADDRESS> -PiUser <USERNAME>
+   ```
+   *(e.g., `.\deploy-to-pi.ps1 -PiIP 192.168.1.100 -PiUser pi`)*
+
+This script:
+- Bundles the application files into a clean archive (excluding `.git` overhead).
+- Transfers the bundle over Wi-Fi in ~1-2 seconds.
+- Automatically executes the 100% offline installer on the Pi over SSH.
 
 ---
 
-### Option B: Manual Local Wi-Fi Transfer (SCP / SFTP / USB)
+### Option B: Offline Installation on the Pi (No Internet Required)
 
-1. **Transfer the folder to the Pi:**
-   From your PC terminal:
-   ```bash
-   scp -r . pi@<pi-ip>:~/flashforge-webserver
-   ```
-   *(Or copy the folder onto a USB drive / MicroSD card partition)*.
+All runtime dependencies (`bottle.py`, pure-Python `pyserial`, and pre-compiled ARMv6 `gpx`) are bundled in this repository.
 
-2. **Run the 100% Offline Installer on the Pi:**
+1. Copy this project folder to the Pi (via `scp`, USB drive, or SD card).
+2. SSH into your Pi:
    ```bash
-   ssh pi@<pi-ip>
    cd ~/flashforge-webserver
+   chmod +x scripts/*.sh
    sudo ./scripts/install-offline.sh
    ```
-   The offline installer finishes in under 10 seconds without attempting any internet connections.
+   The offline installer finishes in under 10 seconds without making any external network requests.
 
 ---
 
-## Online Installation (When Internet Access is Available)
+### Option C: Online Installation (When Internet Access is Available)
 
-If your Pi has active WAN/Internet access, you can also run the standard online installer:
+If your Pi is connected to the internet and you wish to compile GPX natively from source:
 ```bash
+cd ~/flashforge-webserver
+chmod +x scripts/*.sh
 sudo ./scripts/install.sh
 ```
 
-## Manual Step-by-Step Setup
-
-If you prefer installing manually without running `install.sh`:
-
-### 1. Build and Install GPX
-```bash
-sudo apt-get update
-sudo apt-get install -y build-essential autoconf automake git python3 python3-serial curl
-
-# Clone and compile GPX
-git clone --depth 1 https://github.com/markwal/GPX.git /tmp/gpx
-cd /tmp/gpx
-./configure --prefix=/usr/local
-make -j1
-sudo make install
-/usr/local/bin/gpx -?
-```
-
-### 2. Configure Permissions & Spool
-```bash
-sudo usermod -a -G dialout pi
-sudo mkdir -p /var/spool/ffcp/queue
-sudo chown -R pi:pi /var/spool/ffcp
-sudo chmod -R 775 /var/spool/ffcp
-```
-
-### 3. Deploy Application Files
-```bash
-sudo mkdir -p /opt/ffcp-webserver
-sudo cp -r . /opt/ffcp-webserver/
-sudo chown -R pi:pi /opt/ffcp-webserver
-
-sudo cp scripts/gpx-daemon.sh /usr/local/bin/gpx-daemon.sh
-sudo chmod +x /usr/local/bin/gpx-daemon.sh
-
-sudo cp scripts/ffcp-clear-bed /usr/local/bin/ffcp-clear-bed
-sudo chmod +x /usr/local/bin/ffcp-clear-bed
-```
-
-### 4. Install & Enable Systemd Services
-```bash
-sudo cp systemd/gpx-daemon.service /etc/systemd/system/
-sudo cp systemd/ffcp-queue.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable gpx-daemon.service ffcp-queue.service
-sudo systemctl start gpx-daemon.service
-sudo systemctl start ffcp-queue.service
-```
-
 ---
 
-## Verification & Operations
+## Operations & Service Management
 
-### 1. Verify the GPX Virtual PTY Bridge
-Check that GPX has created the virtual port symlink:
+### Check Server Status
 ```bash
-ls -l /tmp/ffcp-pty
-```
-Expected output:
-```
-lrwxrwxrwx 1 root root 10 Sep 30 16:30 /tmp/ffcp-pty -> /dev/pts/1
+# Check web server status
+sudo systemctl status ffcp-queue.service
+
+# Check GPX daemon status
+sudo systemctl status gpx-daemon.service
 ```
 
-Test serial communication directly with Python or minicom:
+### Live Log Streaming
 ```bash
-python3 -c "import serial; s = serial.Serial('/tmp/ffcp-pty', 115200, timeout=2); s.write(b'M105\n'); print(s.readline())"
-```
-Expected output:
-```
-b'ok T:25.0 /0.0 B:24.0 /0.0 T0:25.0 /0.0 T1:25.0 /0.0 @:0 B@:0\n'
-```
-
-### 2. Access the Web Interface
-Open any browser on your phone, tablet, or PC on the same Wi-Fi network:
-```
-http://<pi-ip-address>:8080
-```
-(Find your IP with `hostname -I`).
-
-### 3. Monitor Logs with `journalctl`
-```bash
-# Monitor the Web Queue Server
+# View web server logs
 journalctl -u ffcp-queue.service -f
 
-# Monitor the GPX Serial Translation Daemon
+# View GPX serial bridge logs
 journalctl -u gpx-daemon.service -f
 ```
 
+### Restart Services
+```bash
+sudo systemctl restart gpx-daemon.service ffcp-queue.service
+```
+
+### Test API from Terminal
+```bash
+curl -s http://localhost:8080/api/status | python3 -m json.tool
+```
+
 ---
 
-## Safety Gate & Physical Pushbutton Hook
+## Slicing Instructions for FlashForge Creator Pro
 
-When a print completes:
-1. The print server transitions the state to **`Awaiting Bed Clearance`**.
-2. Even if pending prints exist in the queue, **the printer will NOT move**.
-3. Clear the printed object from the bed.
-4. Click **"✓ Bed Cleared — Start Next Job"** in the web interface.
+When exporting `.gcode` from your slicer (**PrusaSlicer**, **OrcaSlicer**, **FlashPrint**, or **Cura**):
 
-### Connecting a Physical Pushbutton (GPIO):
-You can wire a momentary tactile pushbutton between **GPIO 26** and **GND** on the Pi Zero W.
-Run this lightweight background listener:
-```python
-#!/usr/bin/env python3
-import subprocess, time
-import RPi.GPIO as GPIO
-
-BUTTON_PIN = 26
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(BUTTON_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-
-while True:
-    GPIO.wait_for_edge(BUTTON_PIN, GPIO.FALLING, bouncetime=500)
-    subprocess.run(["/usr/local/bin/ffcp-clear-bed"])
-    time.sleep(1)
-```
+1. **Printer Profile:** Select **FlashForge Creator Pro** or **MakerBot Replicator 1 Dual**.
+2. **Extruder Selection:**
+   - **Right Extruder = `T0`** (standard default nozzle)
+   - **Left Extruder = `T1`**
+3. **Format:** Export as standard `.gcode`. The server and GPX engine handle the binary S3G/X3G translation automatically.
+4. **Print:** Drag the `.gcode` file directly into `http://<PI_IP>:8080` and click **▶ Start Now**.
 
 ---
 
@@ -268,11 +220,18 @@ while True:
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `GET /api/status` | `GET` | Live state (`Idle`, `Heating`, `Printing`, `Awaiting Bed Clearance`), temperatures, and print progress. |
-| `GET /api/queue` | `GET` | Active job, list of pending jobs, and recent history. |
-| `POST /api/upload` | `POST` | Upload `.gcode` multipart file. Parses header and adds to queue. |
-| `POST /api/clear-bed` | `POST` | Confirm bed clearance; dispatches next job. |
-| `POST /api/cancel` | `POST` | Emergency abort active print. |
-| `POST /api/jobs/<id>/action` | `POST` | Manage queue (`delete`, `up`, `down`, `start_now`). |
-| `POST /api/printer/send-gcode` | `POST` | Send manual G-code command in terminal. |
-| `POST /api/printer/connect` | `POST` | Reconnect virtual serial port. |
+| `GET /` | `GET` | Web Dashboard user interface. |
+| `GET /api/status` | `GET` | Live state (`Offline`, `Idle`, `Heating`, `Printing`, `Awaiting Bed Clearance`), temperatures, active job, and progress. |
+| `GET /api/queue` | `GET` | Active print, pending queue list, and recent print history. |
+| `POST /api/upload` | `POST` | Upload `.gcode` multipart file. Automatically parses header metadata. |
+| `POST /api/clear-bed` | `POST` | Confirm bed clearance; releases safety gate and starts next queued job. |
+| `POST /api/cancel` | `POST` | Emergency abort: shuts down heaters, drops bed, parks toolhead, and disables steppers. |
+| `POST /api/jobs/<id>/action` | `POST` | Manage queued job (`start_now`, `up`, `down`, `delete`). |
+| `POST /api/printer/send-gcode` | `POST` | Send manual G-code command (e.g. `M115`, `G28 X Y`). |
+| `POST /api/printer/connect` | `POST` | Re-trigger connection to `/tmp/ffcp-pty`. |
+
+---
+
+## License
+
+This project is licensed under the **MIT License** with an explicit **Fire & Thermal Safety Disclaimer**. See the [LICENSE](LICENSE) file for the full text.

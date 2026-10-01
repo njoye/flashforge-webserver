@@ -1,0 +1,47 @@
+MIT License & Fire / Thermal Safety Disclaimer
+
+Copyright (c) 2024-2026 The FlashForge WebServer Open Source Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+================================================================================
+CRITICAL 3D PRINTER SAFETY, THERMAL RUNAWAY & FIRE HAZARD DISCLAIMER:
+================================================================================
+
+1. HIGH-TEMPERATURE THERMAL HAZARDS:
+   3D printers contain high-current electrical heating elements, heated print
+   beds, extruders, and stepper motors operating at extreme temperatures
+   (exceeding 200°C–300°C / 400°F–570°F). Improper control, electrical failure,
+   hardware malfunction, serial communication drops, power interruptions, or
+   software errors can cause thermal runaway, electrical shorts, equipment
+   meltdown, structural fire, property damage, serious personal injury, or death.
+
+2. UNATTENDED OPERATION HAZARD:
+   NEVER LEAVE A 3D PRINTER OPERATING UNATTENDED. Always maintain an operable
+   smoke detector and an appropriate Class B/C fire extinguisher in the vicinity
+   of the printer.
+
+3. "AS-IS" PROVISION & ZERO LIABILITY:
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+
+   UNDER NO CIRCUMSTANCES SHALL THE AUTHORS, COPYRIGHT HOLDERS, MAINTAINERS, OR
+   CONTRIBUTORS BE LIABLE FOR ANY CLAIM, DAMAGES, LOSS OF USE, LOSS OF DATA,
+   FINANCIAL LOSS, EQUIPMENT DAMAGE, PROPERTY DESTRUCTION, FIRE DAMAGE, SMOKE
+   DAMAGE, INJURY, OR DEATH ARISING OUT OF OR IN CONNECTION WITH THE SOFTWARE,
+   THE USE OF THE SOFTWARE, THE COMMUNICATION WITH PRINTER FIRMWARE/HARDWARE,
+   OR THE OPERATION OF ANY HARDWARE CONTROLLED BY THIS SOFTWARE.
+
+   BY USING THIS SOFTWARE, YOU ACKNOWLEDGE THAT 3D PRINTING HARDWARE ENTAILS
+   INHERENT MECHANICAL AND FIRE HAZARDS AND YOU ASSUME 100% OF THE RISK AND
+   RESPONSIBILITY ASSOCIATED WITH ITS USE.
+================================================================================

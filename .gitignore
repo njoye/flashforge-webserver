@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Spool and temporary runtime files
+spool/
+test_spool/
+*.log
+*.tmp
+/tmp/ffcp-pty
+
+# OS & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

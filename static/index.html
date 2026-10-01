@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FlashForge Creator Pro - Print Server</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header class="app-header">
+    <div class="brand">
+      <div class="brand-icon">FF</div>
+      <div class="brand-text">
+        <h1>FlashForge Creator Pro</h1>
+        <div class="brand-subtitle">Sailfish S3G/X3G via GPX PTY Daemon &bull; Raspberry Pi Zero W</div>
+      </div>
+    </div>
+    <div class="header-status">
+      <div id="printer-state-badge" class="badge badge-offline">
+        <span class="badge-dot"></span>
+        <span id="printer-state-text">Connecting...</span>
+      </div>
+      <button id="btn-abort" class="btn btn-danger" style="display: none;" title="Emergency Abort Active Print">
+        🛑 Emergency Abort
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Content Layout -->
+  <main class="container">
+
+    <!-- Critical Safety Gate: Bed Clearance Confirmation -->
+    <section id="safety-gate-banner" class="safety-banner" style="display: none;">
+      <div class="safety-banner-content">
+        <div class="safety-icon">⚠️</div>
+        <div>
+          <h2 class="safety-title">Safety Gate: Awaiting Bed Clearance</h2>
+          <p class="safety-desc">
+            Previous print finished! To prevent toolhead and nozzle collisions, the system will not start the next job until you confirm the build plate is completely clear.
+          </p>
+        </div>
+      </div>
+      <button id="btn-clear-bed" class="btn-safety-clear">
+        ✓ Bed Cleared — Start Next Job
+      </button>
+    </section>
+
+    <div class="dashboard-grid">
+
+      <!-- Left Column: Status & Queue -->
+      <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+
+        <!-- Live Status Card -->
+        <section class="card" id="status-card">
+          <div class="card-header">
+            <h2 class="card-title">📊 Live Status</h2>
+          </div>
+
+          <!-- Temperatures Section -->
+          <div class="temp-grid">
+            <div class="temp-item" id="temp-t0">
+              <div class="temp-label">
+                <span>Right Nozzle (T0)</span>
+                <span>🔥</span>
+              </div>
+              <div class="temp-value">
+                <span class="temp-actual">25</span><span class="temp-unit">°C</span>
+                <span class="temp-target">/ <span class="temp-target-val">0</span>°C</span>
+              </div>
+            </div>
+
+            <div class="temp-item" id="temp-t1">
+              <div class="temp-label">
+                <span>Left Nozzle (T1)</span>
+                <span>🔥</span>
+              </div>
+              <div class="temp-value">
+                <span class="temp-actual">25</span><span class="temp-unit">°C</span>
+                <span class="temp-target">/ <span class="temp-target-val">0</span>°C</span>
+              </div>
+            </div>
+
+            <div class="temp-item" id="temp-bed">
+              <div class="temp-label">
+                <span>Heated Bed</span>
+                <span>♨️</span>
+              </div>
+              <div class="temp-value">
+                <span class="temp-actual">24</span><span class="temp-unit">°C</span>
+                <span class="temp-target">/ <span class="temp-target-val">0</span>°C</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Active Print Progress -->
+          <div id="active-job-section" class="progress-card-section" style="display: none;">
+            <div class="active-job-details">
+              <div class="active-filename" id="active-filename">Printing...</div>
+              <div class="active-percent" id="active-percent">0%</div>
+            </div>
+
+            <div class="progress-track">
+              <div class="progress-fill" id="progress-fill"></div>
+            </div>
+
+            <div class="progress-stats-grid">
+              <div class="progress-stat">
+                <span class="stat-label">Progress</span>
+                <span class="stat-val" id="stat-lines">0 / 0 lines</span>
+              </div>
+              <div class="progress-stat">
+                <span class="stat-label">Elapsed Time</span>
+                <span class="stat-val" id="stat-elapsed">00:00</span>
+              </div>
+              <div class="progress-stat">
+                <span class="stat-label">Est. Remaining</span>
+                <span class="stat-val" id="stat-remaining">--:--</span>
+              </div>
+            </div>
+          </div>
+
+          <div id="no-active-job" class="empty-state" style="padding: 1rem 0;">
+            Printer is idle. Select or upload a print to begin.
+          </div>
+        </section>
+
+        <!-- Print Queue Card -->
+        <section class="card" id="queue-card">
+          <div class="card-header">
+            <h2 class="card-title">
+              📋 Print Queue
+              <span id="pending-count" class="badge badge-idle" style="font-size: 0.75rem;">0</span>
+            </h2>
+          </div>
+
+          <ul class="queue-list" id="pending-queue-list">
+            <li class="empty-state">No jobs in queue.</li>
+          </ul>
+        </section>
+
+        <!-- History Card -->
+        <section class="card" id="history-card">
+          <div class="card-header">
+            <h2 class="card-title">🕒 Recent History</h2>
+            <button id="btn-clear-history" class="btn btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;">
+              Clear History
+            </button>
+          </div>
+
+          <ul class="queue-list" id="history-list">
+            <li class="empty-state">No recent prints.</li>
+          </ul>
+        </section>
+
+      </div>
+
+      <!-- Right Column: Upload & Quick Terminal -->
+      <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+
+        <!-- Drag-and-Drop Upload Card -->
+        <section class="card" id="upload-card">
+          <div class="card-header">
+            <h2 class="card-title">📤 Upload G-code</h2>
+          </div>
+
+          <div id="dropzone" class="dropzone">
+            <input type="file" id="file-input" class="file-input" accept=".gcode">
+            <div class="dropzone-icon">📥</div>
+            <div class="dropzone-title">Drag & Drop .gcode File Here</div>
+            <div class="dropzone-hint">or click to browse from device</div>
+          </div>
+
+          <div class="upload-meta-row">
+            <input type="text" id="owner-input" class="input-text" placeholder="Job Owner (e.g. Tim)" value="Operator">
+          </div>
+        </section>
+
+        <!-- Quick Terminal & Manual Commands -->
+        <section class="card" id="terminal-card">
+          <div class="card-header">
+            <h2 class="card-title">💻 Terminal & Diagnostics</h2>
+          </div>
+
+          <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+            <button class="btn btn-secondary" onclick="document.getElementById('gcode-input').value='M105'; sendManualGcode();" style="font-size: 0.75rem; padding: 0.35rem 0.6rem;">Poll M105</button>
+            <button class="btn btn-secondary" onclick="document.getElementById('gcode-input').value='G28 X Y'; sendManualGcode();" style="font-size: 0.75rem; padding: 0.35rem 0.6rem;">Home XY</button>
+            <button class="btn btn-secondary" onclick="document.getElementById('gcode-input').value='M104 T0 S0'; sendManualGcode();" style="font-size: 0.75rem; padding: 0.35rem 0.6rem;">Cool T0</button>
+            <button class="btn btn-secondary" onclick="document.getElementById('gcode-input').value='M140 S0'; sendManualGcode();" style="font-size: 0.75rem; padding: 0.35rem 0.6rem;">Cool Bed</button>
+          </div>
+
+          <div class="terminal-wrapper">
+            <div class="terminal-output" id="terminal-output">GPX Virtual Terminal ready. Type G-code and press Enter.</div>
+            <div class="terminal-input-row">
+              <input type="text" id="gcode-input" class="input-text" placeholder="Send G-code (e.g. M105)">
+              <button id="btn-send-gcode" class="btn btn-primary">Send</button>
+            </div>
+          </div>
+        </section>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <footer class="app-footer">
+    FlashForge Creator Pro Web Queue &bull; Ultra-lightweight print server for Raspberry Pi Zero W (ARMv6l) &bull; Listening on :8080
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

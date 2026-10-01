@@ -1,0 +1,25 @@
+[Unit]
+Description=FlashForge Creator Pro Ultra-Lightweight Web Print Server and Queue Manager
+After=network.target gpx-daemon.service
+Wants=gpx-daemon.service
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+SupplementaryGroups=dialout
+WorkingDirectory=/opt/ffcp-webserver
+ExecStart=/usr/bin/python3 /opt/ffcp-webserver/server.py --port 8080 --pty /tmp/ffcp-pty --spool /var/spool/ffcp
+Restart=always
+RestartSec=5
+KillMode=process
+StandardOutput=journal
+StandardError=journal
+
+# Sandboxing & Resource constraints suitable for Raspberry Pi Zero W
+Nice=-5
+MemoryHigh=150M
+MemoryMax=250M
+
+[Install]
+WantedBy=multi-user.target

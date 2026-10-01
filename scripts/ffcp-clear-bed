@@ -1,0 +1,15 @@
+#!/bin/bash
+# ffcp-clear-bed - CLI helper to trigger the Bed Cleared Safety Gate
+# Useful for manual shell execution, physical GPIO button daemons, or cron jobs.
+
+SERVER_URL="http://127.0.0.1:8080/api/clear-bed"
+
+echo "[ffcp] Confirming Bed Clearance..."
+RESPONSE=$(curl -s -X POST "$SERVER_URL" -H "Content-Type: application/json")
+
+if [ $? -eq 0 ]; then
+    echo "[ffcp] Server response: $RESPONSE"
+else
+    echo "[ffcp] ERROR: Could not connect to Web Server at $SERVER_URL"
+    exit 1
+fi

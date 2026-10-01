@@ -95,6 +95,9 @@ sed -i "s/^Group=.*/Group=$TARGET_USER/" "$REPO_DIR/systemd/gpx-daemon.service"
 cp "$REPO_DIR/systemd/gpx-daemon.service" /etc/systemd/system/
 cp "$REPO_DIR/systemd/ffcp-queue.service" /etc/systemd/system/
 
+# Clean up any stale root-owned PTY link before restarting services
+rm -f /tmp/ffcp-pty
+
 systemctl daemon-reload
 systemctl enable gpx-daemon.service ffcp-queue.service
 systemctl restart gpx-daemon.service || true

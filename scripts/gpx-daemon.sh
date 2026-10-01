@@ -69,7 +69,7 @@ echo "[gpx-daemon] Detected printer device: $TARGET_PORT"
 # Clean up any existing virtual port symlink
 if [ -L "$PTY_LINK" ] || [ -e "$PTY_LINK" ]; then
     echo "[gpx-daemon] Removing stale virtual port link: $PTY_LINK"
-    rm -f "$PTY_LINK"
+    rm -f "$PTY_LINK" 2>/dev/null || true
 fi
 
 # Ensure GPX binary exists

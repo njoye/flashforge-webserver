@@ -98,36 +98,53 @@ flashforge-webserver/
 
 ---
 
-## 1-Step Installation on Raspberry Pi Zero W
+## Offline Deployment (Local Wi-Fi Without Internet)
 
-### Prerequisites
-- Raspberry Pi Zero W running **Raspberry Pi OS** (Bullseye or Bookworm, 32-bit recommended for ARMv6l).
-- Connected to your local Wi-Fi network.
-- FlashForge Creator Pro connected via USB.
+If your Pi Zero W is connected to a local Wi-Fi network without internet access (WAN), **you do not need apt-get, git clone, or pip!** All dependencies are pre-bundled in this repository:
+- **`bottle.py`**: Vendored single-file micro-framework.
+- **`serial/`**: Vendored pure Python `pyserial` package.
+- **`offline/bin/gpx`**: Pre-compiled native ARMv6 binary for Raspberry Pi Zero W.
+- **`offline/gpx_2.6.8-1_armhf.deb`**: Official Raspbian package.
 
-### Quick Setup
+### Option A: 1-Click Push from Windows (Easiest)
+From your Windows PC in PowerShell, run:
+```powershell
+.\deploy-to-pi.ps1 -PiIP 192.168.1.50 -PiUser pi
+```
+*(Replace `192.168.1.50` with your Pi's local IP or `raspberrypi.local`)*.
 
-1. Copy or clone this repository to the Pi:
-   ```bash
-   git clone https://github.com/your-username/flashforge-webserver.git /home/pi/flashforge-webserver
-   cd /home/pi/flashforge-webserver
-   ```
-
-2. Run the automated installer with `sudo`:
-   ```bash
-   sudo ./scripts/install.sh
-   ```
-
-### What `install.sh` Does:
-- Installs `build-essential`, `git`, `python3`, `python3-serial`, `curl`.
-- Clones Mark Lombard's GPX repo (`https://github.com/markwal/GPX.git`), builds it natively with `gcc`/`make`, and installs to `/usr/local/bin/gpx`.
-- Configures `/var/spool/ffcp/queue` directory with proper permissions.
-- Adds user `pi` to the `dialout` group to access USB serial without `sudo`.
-- Installs `/usr/local/bin/gpx-daemon.sh` and `/usr/local/bin/ffcp-clear-bed`.
-- Installs and enables `gpx-daemon.service` and `ffcp-queue.service`.
-- Starts both services and outputs your Pi's local IP address.
+This will automatically:
+1. Copy all project files across your local Wi-Fi via `scp`.
+2. Run the offline installer on the Pi over SSH.
+3. Start the services and verify the web dashboard.
 
 ---
+
+### Option B: Manual Local Wi-Fi Transfer (SCP / SFTP / USB)
+
+1. **Transfer the folder to the Pi:**
+   From your PC terminal:
+   ```bash
+   scp -r . pi@<pi-ip>:~/flashforge-webserver
+   ```
+   *(Or copy the folder onto a USB drive / MicroSD card partition)*.
+
+2. **Run the 100% Offline Installer on the Pi:**
+   ```bash
+   ssh pi@<pi-ip>
+   cd ~/flashforge-webserver
+   sudo ./scripts/install-offline.sh
+   ```
+   The offline installer finishes in under 10 seconds without attempting any internet connections.
+
+---
+
+## Online Installation (When Internet Access is Available)
+
+If your Pi has active WAN/Internet access, you can also run the standard online installer:
+```bash
+sudo ./scripts/install.sh
+```
 
 ## Manual Step-by-Step Setup
 

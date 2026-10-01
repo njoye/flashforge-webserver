@@ -89,6 +89,8 @@ chmod +x /usr/local/bin/ffcp-clear-bed
 echo -e "\n${BLUE}[4/4] Activating Systemd Services...${NC}"
 sed -i "s/^User=.*/User=$TARGET_USER/" "$REPO_DIR/systemd/ffcp-queue.service"
 sed -i "s/^Group=.*/Group=$TARGET_USER/" "$REPO_DIR/systemd/ffcp-queue.service"
+sed -i "s/^User=.*/User=$TARGET_USER/" "$REPO_DIR/systemd/gpx-daemon.service"
+sed -i "s/^Group=.*/Group=$TARGET_USER/" "$REPO_DIR/systemd/gpx-daemon.service"
 
 cp "$REPO_DIR/systemd/gpx-daemon.service" /etc/systemd/system/
 cp "$REPO_DIR/systemd/ffcp-queue.service" /etc/systemd/system/

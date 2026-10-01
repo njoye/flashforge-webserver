@@ -6,8 +6,10 @@ Wants=network.target
 
 [Service]
 Type=simple
-User=root
-ExecStartPre=/bin/rm -f /tmp/ffcp-pty
+User=pi
+Group=pi
+SupplementaryGroups=dialout
+ExecStartPre=-/bin/rm -f /tmp/ffcp-pty
 ExecStart=/usr/local/bin/gpx-daemon.sh
 Restart=always
 RestartSec=3

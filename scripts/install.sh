@@ -121,9 +121,11 @@ chmod +x /usr/local/bin/ffcp-clear-bed
 # 7. Configure and Install Systemd Services
 echo -e "\n${BLUE}[5/6] Installing Systemd Services...${NC}"
 
-# Update user in ffcp-queue.service
+# Update user in services
 sed -i "s/^User=.*/User=$TARGET_USER/" "$REPO_DIR/systemd/ffcp-queue.service"
 sed -i "s/^Group=.*/Group=$TARGET_USER/" "$REPO_DIR/systemd/ffcp-queue.service"
+sed -i "s/^User=.*/User=$TARGET_USER/" "$REPO_DIR/systemd/gpx-daemon.service"
+sed -i "s/^Group=.*/Group=$TARGET_USER/" "$REPO_DIR/systemd/gpx-daemon.service"
 
 cp "$REPO_DIR/systemd/gpx-daemon.service" /etc/systemd/system/gpx-daemon.service
 cp "$REPO_DIR/systemd/ffcp-queue.service" /etc/systemd/system/ffcp-queue.service

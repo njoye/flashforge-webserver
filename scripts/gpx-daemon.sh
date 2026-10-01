@@ -83,6 +83,18 @@ GPX_BIN=$(command -v gpx || echo "/usr/local/bin/gpx")
 echo "[gpx-daemon] Launching GPX daemon bridge:"
 echo "  Command: $GPX_BIN -m $MACHINE_PROFILE -b $BAUDRATE -D $PTY_LINK $TARGET_PORT"
 
+# Background watchdog to grant read/write permissions on the virtual PTY port
+# once GPX creates it, ensuring ffcp-queue (User=pi) can always access it
+(
+    for i in $(seq 1 30); do
+        if [ -e "$PTY_LINK" ]; then
+            chmod 666 "$PTY_LINK" 2>/dev/null || true
+            break
+        fi
+        sleep 0.2
+    done
+) &
+
 # Execute GPX with:
 # -m r1d: Replicator 1 Dual (FlashForge Creator Pro MightyBoard)
 # -D <path>: create named virtual pseudo-terminal port
